@@ -167,8 +167,8 @@ export class SupabaseStrategy extends Strategy<Session, VerifyParams> {
     const sessionCookie = await this.sessionStorage.getSession(req.headers.get('Cookie'));
     const session: Session | null = sessionCookie.get(this.sessionKey);
     const options: AuthenticateOptions = {
-      name: 'supabase',
-      sessionStrategyKey: 'sb',
+      name: this.name,
+      sessionStrategyKey: this.name,
       sessionKey: this.sessionKey,
       sessionErrorKey: this.sessionErrorKey,
       ...checkOptions
