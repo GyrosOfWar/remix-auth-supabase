@@ -1,5 +1,5 @@
 import type { SessionStorage } from '@remix-run/server-runtime';
-import type { ApiError, Session, SupabaseClient, User } from '@supabase/supabase-js';
+import type { AuthApiError, Session, SupabaseClient, User, UserResponse } from '@supabase/supabase-js';
 import type { AuthenticateOptions, StrategyVerifyCallback } from 'remix-auth';
 import { Strategy } from 'remix-auth';
 import { handlePromise } from './handlePromise';
@@ -50,7 +50,7 @@ export class SupabaseStrategy extends Strategy<Session, VerifyParams> {
     string,
     Promise<{
       data: Session | null;
-      error: ApiError | null;
+      error: AuthApiError | null;
     }>
   > = new Map();
 
@@ -109,22 +109,24 @@ export class SupabaseStrategy extends Strategy<Session, VerifyParams> {
     | {
         user: User | null;
         data: User | null;
-        error: ApiError | null;
+        error: AuthApiError | null;
       }
     | undefined
   > {
-    return (await handlePromise(this.supabaseClient.auth.api.getUser(accessToken)))[0];
+    const result = await handlePromise<UserResponse>(this.supabaseClient.auth.getUser(accessToken));
+    return result[1];
   }
 
   private async handleRefreshToken(refreshToken: string): Promise<{
     data: Session | null;
-    error: ApiError | null;
+    error: AuthApiError | null;
   }> {
-    const [data, error] = await handlePromise(this.supabaseClient.auth.api.refreshAccessToken(refreshToken));
+    const [data, error] = await handlePromise(this.supabaseClient.auth.refreshSession({ refresh_token: refreshToken }));
 
     if (error || !data) throw new Error('Error refreshing access token');
+    const session = data.data.session;
 
-    return data;
+    return { data: session, error };
   }
 
   protected async handleResult(req: Request, options: AuthenticateOptions, result: any, hasErrored = false) {
@@ -164,7 +166,9 @@ export class SupabaseStrategy extends Strategy<Session, VerifyParams> {
   async checkSession(req: Request, checkOptions: CheckOptions = {}): Promise<Session | null> {
     const sessionCookie = await this.sessionStorage.getSession(req.headers.get('Cookie'));
     const session: Session | null = sessionCookie.get(this.sessionKey);
-    const options = {
+    const options: AuthenticateOptions = {
+      name: 'supabase',
+      sessionStrategyKey: 'sb',
       sessionKey: this.sessionKey,
       sessionErrorKey: this.sessionErrorKey,
       ...checkOptions
